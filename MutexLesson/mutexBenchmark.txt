@@ -1,0 +1,79 @@
+﻿package main
+
+import (
+	"fmt"
+	"sync"
+	"time"
+)
+
+// Структура с обычным мьютексом
+type CounterWithMutex struct {
+	mu  sync.Mutex
+	cnt int
+}
+
+func (c *CounterWithMutex) Inc() {
+	c.mu.Lock()
+	c.cnt++
+	c.mu.Unlock()
+}
+
+func (c *CounterWithMutex) Value() int {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	return c.cnt
+}
+
+// Структура с RWMutex
+type CounterWithRWMutex struct {
+	mu  sync.RWMutex
+	cnt int
+}
+
+func (c *CounterWithRWMutex) Inc() {
+	c.mu.Lock()
+	c.cnt++
+	c.mu.Unlock()
+}
+
+func (c *CounterWithRWMutex) Value() int {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+	return c.cnt
+}
+
+// Функция для запуска нескольких горутин на чтение
+func runReadBenchmark(counter interface{ Value() int }, numReaders int) time.Duration {
+	var wg sync.WaitGroup
+	wg.Add(numReaders)
+
+	start := time.Now()
+	for i := 0; i < numReaders; i++ {
+		go func() {
+			defer wg.Done()
+			// Выполняем чтение 1000 раз
+			for j := 0; j < 1000; j++ {
+				counter.Value()
+			}
+		}()
+	}
+
+	wg.Wait()
+	return time.Since(start)
+}
+
+func main() {
+	numReaders := 100
+
+	// Создаем счетчики с Mutex и RWMutex
+	counterMutex := &CounterWithMutex{}
+	counterRWMutex := &CounterWithRWMutex{}
+
+	// Запускаем тест с обычным Mutex
+	mutexDuration := runReadBenchmark(counterMutex, numReaders)
+	fmt.Printf("Время выполнения с обычным Mutex: %v\n", mutexDuration)
+
+	// Запускаем тест с RWMutex
+	rwMutexDuration := runReadBenchmark(counterRWMutex, numReaders)
+	fmt.Printf("Время выполнения с RWMutex: %v\n", rwMutexDuration)
+}
